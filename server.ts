@@ -28,24 +28,7 @@ let scheduleConfig = {
   timezone: "Asia/Taipei"
 };
 
-async function loadSchedule() {
-  try {
-    const data = await fs.readFile(SCHEDULE_FILE, "utf-8");
-    scheduleConfig = { ...scheduleConfig, ...JSON.parse(data) };
-    console.log("Loaded schedule config:", scheduleConfig);
-  } catch (e) {
-    console.log("No existing schedule config found, using defaults.");
-  }
-  updateCronJobs();
-}
-
-async function saveSchedule() {
-  try {
-    await fs.writeFile(SCHEDULE_FILE, JSON.stringify(scheduleConfig, null, 2));
-  } catch (e) {
-    console.error("Failed to save schedule config:", e);
-  }
-}
+// Functions moved to startServer for scope resolution
 
 // Media weights (Higher is better)
 const MEDIA_WEIGHTS: Record<string, number> = {
@@ -86,7 +69,41 @@ const STRATEGIC_KEYWORDS = [
   "加盟", "連鎖", "永續", "ESG", "人才", "培訓", "通路", "流通", "消費趨勢"
 ];
 
+// Memory Cache implementation
+let cachedNews: any[] | null = null;
+let cacheExpiration: number = 0;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+let fetchPromise: Promise<any[]> | null = null;
+
 async function fetchAndProcessNews() {
+  if (cachedNews && Date.now() < cacheExpiration) {
+    console.log("Serving news from cache...");
+    return cachedNews;
+  }
+  
+  if (fetchPromise) {
+    return fetchPromise;
+  }
+  
+  fetchPromise = (async () => {
+    try {
+      console.log("Fetching fresh news from Google RSS...");
+      const news = await performFetchAndProcessNews();
+      cachedNews = news;
+      cacheExpiration = Date.now() + CACHE_TTL_MS;
+      return news;
+    } catch (e) {
+      console.error("Error updating news cache:", e);
+      return cachedNews || [];
+    } finally {
+      fetchPromise = null;
+    }
+  })();
+  
+  return fetchPromise;
+}
+
+async function performFetchAndProcessNews() {
   const keywords = ["零售", "電商", "91APP", "SHOPLINE", "CYBERBIZ"];
   let allItems: any[] = [];
 
@@ -260,6 +277,25 @@ async function fetchAndProcessNews() {
 }
 
 async function startServer() {
+  async function loadSchedule() {
+    try {
+      const data = await fs.readFile(SCHEDULE_FILE, "utf-8");
+      scheduleConfig = { ...scheduleConfig, ...JSON.parse(data) };
+      console.log("Loaded schedule config:", scheduleConfig);
+    } catch (e) {
+      console.log("No existing schedule config found, using defaults.");
+    }
+    updateCronJobs();
+  }
+
+  async function saveSchedule() {
+    try {
+      await fs.writeFile(SCHEDULE_FILE, JSON.stringify(scheduleConfig, null, 2));
+    } catch (e) {
+      console.error("Failed to save schedule config:", e);
+    }
+  }
+
   const app = express();
   const PORT = 3000;
 
@@ -269,8 +305,8 @@ async function startServer() {
   app.post("/api/line/push", async (req, res) => {
     try {
       const { news } = req.body;
-      const LINE_ACCESS_TOKEN = "P6uZiI5KpHonlmHqGvmAvVmcl5TI5F/nF7zvlCCyriflP5/P0mvdKJI1RUn3+SCHrWQ9BMSCa4nH31TrUUeuUqc/6qAqwPNg9uQhxVGsEryaV5P94b1vSNvT2l4OFoB4NHS9kB65nlnTp19c8x74/AdB04t89/1O/w1cDnyilFU=";
-      const LINE_USER_ID = "U82404d4fa54a45b5b98e59028aea7636";
+      const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
+      const LINE_USER_ID = process.env.LINE_USER_ID;
 
       if (!LINE_ACCESS_TOKEN) {
         return res.status(400).json({ error: "LINE API keys not configured. Please set LINE_ACCESS_TOKEN in .env" });
@@ -497,7 +533,7 @@ async function startServer() {
             {
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+                Authorization: `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
               },
             }
           );
