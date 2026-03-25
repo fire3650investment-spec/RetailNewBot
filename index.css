@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-red: #E72410;
+  --color-apple-gray: #F5F5F7;
+  --color-apple-border: #D2D2D7;
+}
+
+@layer base {
+  body {
+    @apply bg-white text-black font-sans antialiased;
+  }
+}
+
+.apple-card {
+  @apply bg-white rounded-2xl border border-apple-border/30 transition-all duration-300;
+}
+
+.apple-button {
+  @apply px-4 py-2 rounded-full font-medium transition-all active:scale-95 disabled:opacity-50;
+}
+
+.apple-tab {
+  @apply relative px-6 py-3 text-sm font-medium transition-colors;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
